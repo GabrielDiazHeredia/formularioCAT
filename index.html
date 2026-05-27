@@ -147,8 +147,8 @@ body{
 
 .container{
 
-  width:100%;
-  max-width:900px;
+  width:190mm;
+  max-width:190mm;
 
   margin:0 auto;
 
@@ -680,17 +680,6 @@ body{
 /* PDF */
 /* ───────────────────────────────────── */
 
-@media print{
-
-  html,
-  body{
-
-    width:210mm;
-    height:297mm;
-
-    background:white;
-
-  }
 
   body{
     padding:0;
@@ -1269,13 +1258,24 @@ async function generarPDF(){
 
   const element = document.getElementById('pdf-content');
 
-  const originalWidth = element.style.maxWidth;
+  /* Altura dinámica real del formulario */
 
-  element.style.maxWidth = '794px';
+  const elementHeight = element.scrollHeight;
+
+  const elementWidth = element.scrollWidth;
+
+  /*
+    Conversión aproximada px → mm
+    1mm ≈ 3.78px
+  */
+
+  const pdfWidth = 210; // A4 width mm
+
+  const pdfHeight = Math.ceil(elementHeight / 3.78);
 
   const options = {
 
-    margin:[10,10,10,10],
+    margin: 0,
 
     filename:'cuestionario_parque_salud.pdf',
 
@@ -1290,25 +1290,17 @@ async function generarPDF(){
 
       useCORS:true,
 
-      scrollY:0,
-
-      windowWidth:794
+      scrollY:0
 
     },
 
     jsPDF:{
 
-      unit:'pt',
+      unit:'mm',
 
-      format:'a4',
+      format:[pdfWidth, pdfHeight],
 
       orientation:'portrait'
-
-    },
-
-    pagebreak:{
-
-      mode:['avoid-all','css','legacy']
 
     }
 
@@ -1318,8 +1310,6 @@ async function generarPDF(){
     .set(options)
     .from(element)
     .save();
-
-  element.style.maxWidth = originalWidth;
 
   btn.disabled = false;
 
