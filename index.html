@@ -609,92 +609,117 @@
 
 <script>
 // ── Signature pad ──────────────────────────────────────────────
-const canvases = {};
+const padState = {};
 
 function initCanvas(id, placeholderId) {
-  const wrap = document.getElementById(id).parentElement;
   const canvas = document.getElementById(id);
+  const wrap   = canvas.parentElement;
   const placeholder = document.getElementById(placeholderId);
+  const dpr = window.devicePixelRatio || 1;
 
-  // Set canvas resolution to match display
-  function resize() {
-    const rect = wrap.getBoundingClientRect();
-    const dpr = window.devicePixelRatio || 1;
-    canvas.width = rect.width * dpr;
-    canvas.height = rect.offsetHeight * dpr;
-    canvas.style.width = rect.width + 'px';
-    canvas.style.height = rect.offsetHeight + 'px';
+  // Snapshot of drawn pixels so resize can restore them
+  let snapshot = null;
+
+  function setupCanvas() {
+    const w = wrap.offsetWidth;
+    const h = wrap.offsetHeight;
+    // Save current drawing
+    if (canvas.width > 0 && canvas.height > 0) {
+      snapshot = canvas.toDataURL();
+    }
+    canvas.width  = w * dpr;
+    canvas.height = h * dpr;
+    canvas.style.width  = w + 'px';
+    canvas.style.height = h + 'px';
     const ctx = canvas.getContext('2d');
-    ctx.scale(dpr, dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.strokeStyle = '#1c2b2a';
+    ctx.lineWidth   = 2.5;
+    ctx.lineCap     = 'round';
+    ctx.lineJoin    = 'round';
+    // Restore drawing after resize
+    if (snapshot) {
+      const img = new Image();
+      img.onload = () => ctx.drawImage(img, 0, 0, w, h);
+      img.src = snapshot;
+    }
   }
 
-  resize();
-  window.addEventListener('resize', () => { resize(); });
+  // Wait for layout then init
+  requestAnimationFrame(() => {
+    setupCanvas();
+    window.addEventListener('resize', setupCanvas);
+  });
 
   const state = { drawing: false, hasDrawn: false };
-  canvases[id] = state;
+  padState[id] = state;
 
-  const ctx = canvas.getContext('2d');
-  ctx.strokeStyle = '#1c2b2a';
-  ctx.lineWidth = 2;
-  ctx.lineCap = 'round';
-  ctx.lineJoin = 'round';
+  function getCtx() { return canvas.getContext('2d'); }
 
-  function getPos(e) {
-    const rect = canvas.getBoundingClientRect();
+  function pos(e) {
+    const r = canvas.getBoundingClientRect();
     const src = e.touches ? e.touches[0] : e;
-    return {
-      x: src.clientX - rect.left,
-      y: src.clientY - rect.top
-    };
+    return { x: src.clientX - r.left, y: src.clientY - r.top };
   }
 
-  function start(e) {
+  function onStart(e) {
     e.preventDefault();
+    e.stopPropagation();
     state.drawing = true;
-    const pos = getPos(e);
+    const p = pos(e);
+    const ctx = getCtx();
     ctx.beginPath();
-    ctx.moveTo(pos.x, pos.y);
+    ctx.moveTo(p.x, p.y);
     if (!state.hasDrawn) {
       state.hasDrawn = true;
       placeholder.classList.add('hidden');
     }
   }
 
-  function draw(e) {
+  function onMove(e) {
     if (!state.drawing) return;
     e.preventDefault();
-    const pos = getPos(e);
-    ctx.lineTo(pos.x, pos.y);
+    e.stopPropagation();
+    const p = pos(e);
+    const ctx = getCtx();
+    ctx.lineTo(p.x, p.y);
     ctx.stroke();
-  }
-
-  function stop(e) {
-    if (e) e.preventDefault();
-    state.drawing = false;
     ctx.beginPath();
+    ctx.moveTo(p.x, p.y);
   }
 
-  canvas.addEventListener('mousedown', start);
-  canvas.addEventListener('mousemove', draw);
-  canvas.addEventListener('mouseup', stop);
-  canvas.addEventListener('mouseleave', stop);
-  canvas.addEventListener('touchstart', start, { passive: false });
-  canvas.addEventListener('touchmove', draw, { passive: false });
-  canvas.addEventListener('touchend', stop, { passive: false });
+  function onEnd(e) {
+    if (e) { e.preventDefault(); e.stopPropagation(); }
+    state.drawing = false;
+    getCtx().beginPath();
+    snapshot = canvas.toDataURL();
+  }
+
+  // Mouse
+  canvas.addEventListener('mousedown',  onStart, false);
+  canvas.addEventListener('mousemove',  onMove,  false);
+  canvas.addEventListener('mouseup',    onEnd,   false);
+  canvas.addEventListener('mouseleave', onEnd,   false);
+  // Touch — must be non-passive to call preventDefault
+  canvas.addEventListener('touchstart', onStart, { passive: false, capture: false });
+  canvas.addEventListener('touchmove',  onMove,  { passive: false, capture: false });
+  canvas.addEventListener('touchend',   onEnd,   { passive: false, capture: false });
+  canvas.addEventListener('touchcancel',onEnd,   { passive: false, capture: false });
 }
 
 function clearCanvas(id, placeholderId) {
   const canvas = document.getElementById(id);
   const ctx = canvas.getContext('2d');
   ctx.clearRect(0, 0, canvas.width, canvas.height);
-  canvases[id].hasDrawn = false;
+  padState[id].hasDrawn = false;
   document.getElementById(placeholderId).classList.remove('hidden');
 }
 
-// Init both canvases
-initCanvas('canvas-titular', 'placeholder-titular');
-initCanvas('canvas-tercero', 'placeholder-tercero');
+// Init both canvases after DOM is ready
+document.addEventListener('DOMContentLoaded', () => {
+  initCanvas('canvas-titular',  'placeholder-titular');
+  initCanvas('canvas-tercero',  'placeholder-tercero');
+});
 
 // ── Submit ──────────────────────────────────────────────────────
 function enviarFormulario() {
